@@ -1,3 +1,4 @@
 kwg
 *.conf
 !example.conf
+dist/

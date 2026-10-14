@@ -24,17 +24,63 @@ Kavita, …) for KOReader, a KOReader sync server, or your whole home network �
 Running on a **Kindle Paperwhite (12th generation, 2024)**: firmware 5.19.5, kernel
 5.15.41-lab126, armv7l — full tunnel home, autostarted at boot.
 
+## KOReader plugin (easiest)
+
+`kwg.koplugin.zip` from the [releases](../../releases) contains the plugin, the `kwg` binary
+and the watchdog.
+
+1. Unzip it into KOReader's plugin folder, so you get `koreader/plugins/kwg.koplugin/`
+   (over USB that's `koreader/plugins/` on the Kindle drive; over SSH `/mnt/us/koreader/plugins/`).
+2. Put your WireGuard client config (any `*.conf`, a normal `wg-quick` file — see
+   [`example.conf`](example.conf)) into that `kwg.koplugin/` folder.
+3. Restart KOReader. The config is imported to `/var/local/kwg/wg.conf` — internal storage,
+   **not** visible over USB — and removed from the plugin folder.
+
+Then, in KOReader: **Settings (⚙) → Network → WireGuard**:
+
+- **Status line** — tunnel up/off, tunnel address, last handshake; tap for traffic details.
+- **Tunnel on** — start/stop. The tunnel keeps running when you leave KOReader.
+- **Start at boot** — installs the upstart job and starts the tunnel at every boot.
+- **Settings** — edit single values: tunnel address, DNS, server endpoint, server public key,
+  routed networks (`AllowedIPs`), keepalive, preshared key; enter or generate the private key;
+  show this Kindle's public key.
+- **Edit config as text** — the whole config in an editor, or type one from scratch. The
+  private key is shown as `<unchanged>`; leave it to keep the current key.
+- **Import config file** — pick a `.conf` anywhere on the Kindle (offers to delete it from the
+  USB storage afterwards).
+- **Show log**
+
+Every save is checked (`kwg check`); a running tunnel is restarted with the new config. The
+previous config is kept as `/var/local/kwg/wg.conf.bak`.
+
+No SSH needed after the install — KOReader on a rooted Kindle runs as root, so the plugin can
+manage the tunnel and the upstart job itself. To remove it: turn the tunnel and *Start at boot* off, delete `kwg.koplugin/`, then
+`mntroot rw; rm /etc/upstart/kwg.conf; mntroot ro` (or leave the job — without the plugin
+folder it does nothing).
+
+## Command line
+
+```
+kwg up <wg.conf>       bring the tunnel up; runs until SIGINT/SIGTERM (also: kwg <wg.conf>)
+kwg status             tunnel state, last handshake, traffic
+kwg check <wg.conf>    validate a config
+kwg genkey             print a new private key
+kwg pubkey [wg.conf]   public key of the config's PrivateKey (or of a private key on stdin)
+```
+
 ## Build
 
 Needs Go (any OS):
 
 ```
-CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags="-s -w" -o kwg .
+make            # kwg — CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build …
+make plugin     # dist/kwg.koplugin.zip
 ```
 
-Or grab `kwg` from the [releases](../../releases).
+Or grab `kwg` / `kwg.koplugin.zip` from the [releases](../../releases). Releases are built by
+GitHub Actions from the tagged source (`.github/workflows/release.yml`).
 
-## Install
+## Manual install (without the plugin)
 
 Copy `kwg` and your WireGuard client config to the Kindle (KOReader's SSH server listens on
 port 2222):
@@ -50,7 +96,7 @@ The config is a normal `wg-quick` file — see [`example.conf`](example.conf).
 
 ```
 # start (detached from the shell / KOReader, so it keeps running in the stock UI too)
-setsid nohup /mnt/us/kwg/kwg /mnt/us/kwg/wg.conf > /mnt/us/kwg/kwg.log 2>&1 < /dev/null &
+setsid nohup /mnt/us/kwg/kwg up /mnt/us/kwg/wg.conf > /mnt/us/kwg/kwg.log 2>&1 < /dev/null &
 
 # check
 cat /mnt/us/kwg/kwg.log      # kwg: wg0 up (full tunnel: true, dns: [...])
@@ -60,7 +106,7 @@ ip route
 killall kwg
 ```
 
-## Autostart + watchdog
+## Autostart + watchdog (manual install)
 
 [`kwg-loop.sh`](kwg-loop.sh) waits for Wi-Fi, starts `kwg`, and restarts it when it exits,
 when Wi-Fi drops, or when the default gateway changes (another network).
@@ -108,8 +154,8 @@ From `[Interface]` it uses `PrivateKey`, `Address` and `DNS`; from `[Peer]` it u
   start. The watchdog restarts `kwg` when the gateway changes; without it, restart by hand.
 - **DNS overwrite:** a DHCP renewal may rewrite `/etc/resolv.conf`. Restart `kwg` if names stop
   resolving through the tunnel (`stop kwg; start kwg`).
-- **Private key on USB storage:** `/mnt/us` is what a computer sees when the Kindle is plugged
-  in, so the config (and its private key) is readable there.
+- **Private key on USB storage (manual install):** `/mnt/us` is what a computer sees when the
+  Kindle is plugged in, so a config kept there is readable. The plugin keeps it in `/var/local/kwg/`.
 - One tunnel (`wg0`), one peer.
 
 ## License
