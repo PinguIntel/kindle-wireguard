@@ -174,7 +174,7 @@ function Kwg:sh(cmd, always)
         logger.info("kwg (dry run):", cmd)
         return true
     end
-    local r = os.execute(cmd)
+    local r = os.execute(cmd .. " >/dev/null 2>&1") -- keep KOReader's crash.log clean
     return r == 0 or r == true
 end
 
