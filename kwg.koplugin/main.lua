@@ -152,6 +152,11 @@ local Kwg = WidgetContainer:extend{
 function Kwg:init()
     -- Off a Kindle (e.g. the desktop emulator) nothing is executed: commands are only logged.
     self.dry = not Device:isKindle()
+    -- KOReader passes the plugin folder relative to its own working directory; upstart
+    -- runs the job from /, so everything that ends up in the job file must be absolute.
+    if self.path:sub(1, 1) ~= "/" then
+        self.path = lfs.currentdir() .. "/" .. self.path:gsub("^%./", "")
+    end
     self.bin = self.path .. "/kwg"
     self.loop = self.path .. "/kwg-loop.sh"
     self.state = self.dry and (DataStorage:getDataDir() .. "/kwg-test") or "/var/local/kwg"
@@ -522,9 +527,15 @@ function Kwg:menuItems()
             checked_func = function() return self:jobRunning() end,
             keep_menu_open = true,
             callback = function(touchmenu)
-                if self:jobRunning() then self:stop() else self:start() end
+                local starting = not self:jobRunning()
+                if starting then self:start() else self:stop() end
                 -- give the tunnel a moment before the status line is refreshed
-                UIManager:scheduleIn(3, function() touchmenu:updateItems() end)
+                UIManager:scheduleIn(3, function()
+                    if starting and not self:jobRunning() and exists(self.conf) and not self:check() then
+                        self:notify(_("The tunnel stopped right after starting. See 'Show log', or /var/log/messages on the Kindle (grep kwg)."))
+                    end
+                    touchmenu:updateItems()
+                end)
                 touchmenu:updateItems()
             end,
         },
