@@ -466,7 +466,14 @@ function Kwg:importFile()
 end
 
 function Kwg:showLog()
-    local text = self.dry and "(dry run)" or self:run("tail -n 100 " .. q(self.log))
+    local text
+    if self.dry then
+        text = "(dry run)"
+    elseif not exists(self.log) then
+        text = _("No log yet — it is written once the tunnel has been started from this menu.")
+    else
+        text = self:run("tail -n 100 " .. q(self.log))
+    end
     UIManager:show(TextViewer:new{ title = _("WireGuard log"), text = text ~= "" and text or _("(empty)") })
 end
 
