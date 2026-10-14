@@ -1,0 +1,5 @@
+# kwg: WireGuard tunnel watchdog — copy to /etc/upstart/kwg.conf
+start on framework_ready
+stop on stopping framework
+respawn
+exec /bin/sh /mnt/us/kwg/kwg-loop.sh

@@ -21,7 +21,8 @@ Kavita, …) for KOReader, a KOReader sync server, or your whole home network �
   ```
 - An ARMv7 Kindle (`uname -m` → `armv7l`).
 
-Tested on firmware 5.19.5, kernel 5.15.41-lab126, armv7l.
+Running on a **Kindle Paperwhite (12th generation, 2024)**: firmware 5.19.5, kernel
+5.15.41-lab126, armv7l — full tunnel home, autostarted at boot.
 
 ## Build
 
@@ -59,6 +60,35 @@ ip route
 killall kwg
 ```
 
+## Autostart + watchdog
+
+[`kwg-loop.sh`](kwg-loop.sh) waits for Wi-Fi, starts `kwg`, and restarts it when it exits,
+when Wi-Fi drops, or when the default gateway changes (another network).
+[`kwg.upstart`](kwg.upstart) is an upstart job that runs the loop at boot
+(`start on framework_ready`) and respawns it if it dies.
+
+```
+scp -P 2222 kwg-loop.sh kwg.upstart root@<kindle-ip>:/mnt/us/kwg/
+# on the Kindle:
+mntroot rw
+cp /mnt/us/kwg/kwg.upstart /etc/upstart/kwg.conf
+mntroot ro
+start kwg
+```
+
+Control it with upstart (a plain `killall kwg` just gets restarted by the loop):
+
+```
+status kwg     # kwg start/running
+stop kwg       # tunnel off — routes and /etc/resolv.conf restored
+start kwg      # tunnel on
+```
+
+`stop kwg` lasts until the next reboot. To remove the autostart:
+`mntroot rw; rm /etc/upstart/kwg.conf; mntroot ro`.
+
+The loop logs to `/mnt/us/kwg/kwg.log` and trims it to the last 200 lines when it passes 200 KB.
+
 ## What it does
 
 From `[Interface]` it uses `PrivateKey`, `Address` and `DNS`; from `[Peer]` it uses
@@ -75,9 +105,9 @@ From `[Interface]` it uses `PrivateKey`, `Address` and `DNS`; from `[Peer]` it u
 
 - **IPv4 only.** IPv6 entries are ignored; on a network with IPv6, IPv6 traffic bypasses the tunnel.
 - **Changing Wi-Fi networks:** the endpoint route points at the gateway that was current at
-  start. Restart `kwg` after switching networks.
+  start. The watchdog restarts `kwg` when the gateway changes; without it, restart by hand.
 - **DNS overwrite:** a DHCP renewal may rewrite `/etc/resolv.conf`. Restart `kwg` if names stop
-  resolving through the tunnel.
+  resolving through the tunnel (`stop kwg; start kwg`).
 - **Private key on USB storage:** `/mnt/us` is what a computer sees when the Kindle is plugged
   in, so the config (and its private key) is readable there.
 - One tunnel (`wg0`), one peer.
